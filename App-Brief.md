@@ -8,7 +8,7 @@ owner: "Sebastian Srikanth Kumar Selvaraj <sebastian.selvaraj@cognitedata.com>"
 userCount: ""
 businessValue: ""
 milestones: ""
-repoUrl: ""
+repoUrl: "https://github.com/sebastian-srikanth/sebastian-flow-app-certification"
 userRole: "This application is designed for an Operations Analyst (or Reliability Engineer) working at an industrial facility. Their typical day: They start their morning reviewing daily shift reports or alarms. When an anomaly is flagged on a specific piece of equipment (e.g., a pump or compressor), it is their job to investigate its history, current state, and relevant documentation to brief the maintenance team. Environment: They work primarily at a desk in an office environment, occasionally visiting the control room. They use a standard desktop or laptop with a large monitor."
 currentProblem: "The specific moment of pain occurs right after an asset is flagged for review. The Analyst knows the equipment tag (e.g., \"PUMP-101\"), but to understand what is happening, they have to play \"data detective.\" The breakdown: They have to log into SAP to see open work orders, open a separate historian tool to view live sensor data, and dig through a messy SharePoint drive to find the P&ID diagram. The workaround: Because this takes 1-2 hours per asset, they often rely on outdated Excel spreadsheets, ask colleagues on Teams for \"tribal knowledge,\" or make decisions with incomplete data to save time."
 oneSentenceStory: "As an Operations Analyst, I want to search for a specific piece of equipment and instantly see its connected time series data, recent work orders, and related documents in one unified view, so that I can quickly understand its status without switching between five different systems."
@@ -31,7 +31,7 @@ reviewedSections:
 - **Expected users:**
 - **Business value:**
 - **Milestones:**
-- **Repository:**
+- **Repository:** https://github.com/sebastian-srikanth/sebastian-flow-app-certification
 - **App externalId:** workspace
 - **Infra:** appsApi
 
