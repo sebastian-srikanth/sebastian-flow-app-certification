@@ -1,0 +1,28 @@
+# Dependencies
+node_modules
+
+# Build output
+dist
+coverage
+
+# Retained app bundles from `cognite apps deploy` (signed before publish)
+.cognite-bundles
+
+# Local HTTPS certificates from `cognite apps setup-https`
+certificates
+
+# Environment variables
+.env
+.env.local
+
+# Editor directories
+.vscode
+.idea
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Downloaded certification course material. Not application code, and `apps submit` packages the
+# tracked tree into the source archive, so this must never be tracked.
+sources
