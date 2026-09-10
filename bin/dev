@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+IMAGE_NAME="${FLOWS_DEV_IMAGE:-sebastian-flow-app-certification-dev}"
+DEV_PORT="${FLOWS_DEV_PORT:-3001}"
+
+# Docker caches unchanged layers; always check the Dockerfile so runtime updates apply.
+docker build -t "$IMAGE_NAME" "$REPO_ROOT"
+
+docker run --rm \
+  -p "127.0.0.1:$DEV_PORT:3001" \
+  -v "$REPO_ROOT:/workspace" \
+  -v sebastian-flow-app-certification-node-modules:/workspace/node_modules \
+  -w /workspace \
+  "$IMAGE_NAME" \
+  "$@"

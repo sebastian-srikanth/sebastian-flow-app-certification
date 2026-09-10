@@ -1,0 +1,17 @@
+{
+  "name": "Flows Builder Certification",
+  "description": "Cognite Flows Builder Certification guided hands-on application",
+  "externalId": "workspace",
+  "versionTag": "0.0.2",
+  "infra": "appsApi",
+  "deployments": [
+    {
+      "org": "publicdata",
+      "project": "publicdatacdm",
+      "baseUrl": "https://api.cognitedata.com",
+      "published": false,
+      "deployClientId": "",
+      "deploySecretName": "PUBLICDATA_PUBLICDATACDM_API"
+    }
+  ]
+}
