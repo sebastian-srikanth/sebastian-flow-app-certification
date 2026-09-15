@@ -1,0 +1,9 @@
+# Keep local dependencies, generated output, and certification-course material out of the
+# Docker build context. The image is a development runtime; application dependencies are
+# installed from the lockfile inside the container when needed.
+node_modules
+dist
+coverage
+sources
+.git
+.DS_Store

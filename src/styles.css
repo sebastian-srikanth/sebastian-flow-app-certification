@@ -1,0 +1,19 @@
+@import '@cognite/aura/styles.source.css' source(none);
+
+/*
+ * Tailwind's automatic content detection is disabled above and the scanned sources are declared
+ * explicitly. Auto-detection is rooted at the repository, so it also scanned the agent skill
+ * markdown, the course material under `sources/` and the review reports — which inflated the CSS
+ * bundle and turned the literal placeholder `[file:line]` in a skill document into an invalid
+ * arbitrary-property rule (`.\[file\:line\]{file:line}`), failing the CSS minifier.
+ */
+@source '../index.html';
+@source '../src';
+@source '../node_modules/@cognite/aura/dist/components';
+@source '../node_modules/@cognite/aura/dist/lib';
+
+:root {
+  --font-inter: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-source-code-pro: "Source Code Pro", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+}
