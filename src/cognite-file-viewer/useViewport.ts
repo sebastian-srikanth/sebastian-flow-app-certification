@@ -71,15 +71,18 @@ export function useViewport(options: ViewportOptions) {
 
   // -- Stable refs for event handlers --
   const currentZoomRef = useRef(currentZoom);
-  currentZoomRef.current = currentZoom;
   const currentPanRef = useRef(currentPan);
-  currentPanRef.current = currentPan;
   const clampZoomRef = useRef(clampZoom);
-  clampZoomRef.current = clampZoom;
   const handleZoomChangeRef = useRef(handleZoomChange);
-  handleZoomChangeRef.current = handleZoomChange;
   const handlePanChangeRef = useRef(handlePanChange);
-  handlePanChangeRef.current = handlePanChange;
+
+  useEffect(() => {
+    currentZoomRef.current = currentZoom;
+    currentPanRef.current = currentPan;
+    clampZoomRef.current = clampZoom;
+    handleZoomChangeRef.current = handleZoomChange;
+    handlePanChangeRef.current = handlePanChange;
+  }, [clampZoom, currentPan, currentZoom, handlePanChange, handleZoomChange]);
 
   // -- Container dimensions --
   const [containerDims, setContainerDims] = useState({ width: 0, height: 0 });
@@ -220,7 +223,7 @@ export function useViewport(options: ViewportOptions) {
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (currentZoomRef.current <= 1) return;
-    if (e.button !== 1) return; // middle-click only
+    if (e.button !== 0 && e.button !== 1) return;
     e.preventDefault();
     setIsDragging(true);
     dragStart.current = { x: e.clientX, y: e.clientY };

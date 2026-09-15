@@ -309,21 +309,33 @@ describe(useViewport.name, () => {
     });
   });
 
-  describe('middle-click drag to pan', () => {
-    it('starts dragging only on middle-click while zoomed in', () => {
+  describe('mouse drag to pan', () => {
+    it('starts dragging on primary click while zoomed in', () => {
       const { result } = renderHook(() => useViewport({ zoom: 2 }));
 
       act(() => result.current.handleMouseDown(makeMouseEvent(0)));
-      expect(result.current.cursor).toBe('grab');
+      expect(result.current.cursor).toBe('grabbing');
+    });
+
+    it('continues to support middle-click while zoomed in', () => {
+      const { result } = renderHook(() => useViewport({ zoom: 2 }));
 
       act(() => result.current.handleMouseDown(makeMouseEvent(1)));
       expect(result.current.cursor).toBe('grabbing');
     });
 
+    it('ignores right-click while zoomed in', () => {
+      const { result } = renderHook(() => useViewport({ zoom: 2 }));
+
+      act(() => result.current.handleMouseDown(makeMouseEvent(2)));
+
+      expect(result.current.cursor).toBe('grab');
+    });
+
     it('does not start dragging at or below 100% zoom', () => {
       const { result } = renderHook(() => useViewport({ zoom: 1 }));
 
-      act(() => result.current.handleMouseDown(makeMouseEvent(1)));
+      act(() => result.current.handleMouseDown(makeMouseEvent(0)));
 
       expect(result.current.cursor).toBe('default');
     });
@@ -334,7 +346,7 @@ describe(useViewport.name, () => {
         useViewport({ zoom: 2, panOffset: { x: 10, y: 10 }, onPanChange }),
       );
 
-      act(() => result.current.handleMouseDown(makeMouseEvent(1, 100, 100)));
+      act(() => result.current.handleMouseDown(makeMouseEvent(0, 100, 100)));
 
       act(() => {
         window.dispatchEvent(

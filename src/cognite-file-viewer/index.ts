@@ -2,14 +2,13 @@
 export { CogniteFileViewer } from './CogniteFileViewer';
 
 // Annotation overlay (for custom compositions)
-export {
-  DocumentAnnotationOverlay,
-  getAnnotationColor,
-  getAllAnnotationColors,
-} from './DocumentAnnotationOverlay';
+export { getAnnotationColor, getAllAnnotationColors } from './annotationColors';
+export { DocumentAnnotationOverlay } from './DocumentAnnotationOverlay';
 export type { DocumentAnnotationOverlayProps } from './DocumentAnnotationOverlay';
 
 // Hooks (for advanced / custom usage)
+export { useBlobUrl } from './useBlobUrl';
+export type { BlobUrlDependencies, UseBlobUrlResult } from './useBlobUrl';
 export { useFileResolver } from './useFileResolver';
 export { useDocumentAnnotations, clearAnnotationCache } from './useDocumentAnnotations';
 

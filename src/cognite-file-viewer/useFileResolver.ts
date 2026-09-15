@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
 import type { CogniteClient } from '@cognite/sdk';
+import { useState, useEffect, useRef } from 'react';
+
+import { resolveFileDownloadConfig } from './fileResolution';
+import { inferMimeTypeFromUrl } from './mimeTypes';
+import type { FileSource, UseFileResolverResult } from './types';
 
 import { cdfTaskRunner } from '@/lib/cdfTaskRunner';
-
-import type { FileSource, UseFileResolverResult } from './types';
-import { inferMimeTypeFromUrl } from './mimeTypes';
-import { resolveFileDownloadConfig } from './fileResolution';
 
 // ============================================================================
 // Helpers
@@ -119,6 +119,9 @@ export function useFileResolver(
     }
 
     resolve();
+    // `sourceKey` is a stable serialization of every discriminant-specific source field.
+    // Depending on the source object itself would refetch whenever callers use an inline object.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceKey, client]);
 
   return result;

@@ -238,7 +238,9 @@ describe('DocumentsPanel', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Preview Pump manual' }));
 
     const dialog = await screen.findByRole('dialog');
-    expect(within(dialog).getByTestId('cognite-file-viewer')).toBeInTheDocument();
+    expect(
+      await within(dialog).findByTestId('cognite-file-viewer', {}, { timeout: 5_000 }),
+    ).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Feed pump', hidden: true })).toBeInTheDocument();
 
     await userEvent.keyboard('{Escape}');

@@ -34,7 +34,7 @@ const noUnusedVarsOptions = {
 
 export default tseslint.config(
   {
-    ignores: ['dist', 'build', '.next', 'coverage', '*.min.js', 'src/cognite-file-viewer'],
+    ignores: ['dist', 'build', '.next', 'coverage', '*.min.js'],
   },
   {
     files: ['**/*.{js,mjs,cjs,ts,tsx}'],

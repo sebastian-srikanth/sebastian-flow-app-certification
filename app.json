@@ -2,7 +2,7 @@
   "name": "Flows Builder Certification",
   "description": "Cognite Flows Builder Certification guided hands-on application",
   "externalId": "workspace",
-  "versionTag": "0.0.2",
+  "versionTag": "0.0.3",
   "infra": "appsApi",
   "deployments": [
     {

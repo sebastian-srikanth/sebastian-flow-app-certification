@@ -1,13 +1,13 @@
 import type { CogniteClient, FileInfo } from '@cognite/sdk';
 
-import { cdfTaskRunner } from '@/lib/cdfTaskRunner';
-
 import {
   getComputedMimeType,
   isNativelySupportedMimeType,
   doesDocumentPreviewApiSupportFile,
   DocumentMimeType,
 } from './mimeTypes';
+
+import { cdfTaskRunner } from '@/lib/cdfTaskRunner';
 
 // ============================================================================
 // Cache

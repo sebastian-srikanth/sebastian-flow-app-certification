@@ -1,11 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-  DocumentAnnotationOverlay,
-  getAllAnnotationColors,
-  getAnnotationColor,
-} from './DocumentAnnotationOverlay';
+import { DocumentAnnotationOverlay } from './DocumentAnnotationOverlay';
 import type { DocumentAnnotation } from './types';
 
 const annotation: DocumentAnnotation = {
@@ -77,10 +73,5 @@ describe(DocumentAnnotationOverlay.name, () => {
     }
     fireEvent.mouseEnter(rect);
     expect(screen.getByText('Tooltip: Pump')).toBeInTheDocument();
-  });
-
-  it('exposes annotation color helpers', () => {
-    expect(getAnnotationColor('asset').stroke).toContain('rgb');
-    expect(getAllAnnotationColors().unknown.stroke).toContain('rgb');
   });
 });

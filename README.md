@@ -44,9 +44,9 @@ The app reads the base Cognite Core Data Model. It does not invent work-order st
 ## Certification materials
 
 The latest certification evidence is retained in
-[the code review](reviews/code-review/feedback-round-3/code-review-report.md) and
-[the design review](reviews/design-review/feedback-round-2/design-review-report.md).
-The measured result is 249 passing tests, 94.28% line coverage, 82.92% branch
+[the code review](reviews/code-review/feedback-round-4/code-review-report.md) and
+[the design review](reviews/design-review/feedback-round-3/design-review-report.md).
+The measured result is 263 passing tests, 95.31% line coverage, 84.44% branch
 coverage, no audit vulnerabilities, no code-review Must Fix items, and a 4.7
 design score.
 

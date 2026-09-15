@@ -1,5 +1,5 @@
-import type React from 'react';
 import type { CogniteClient, FileInfo } from '@cognite/sdk';
+import type React from 'react';
 
 // ============================================================================
 // File Source (discriminated union)
@@ -69,6 +69,8 @@ export interface UseDocumentAnnotationsResult {
   annotations: DocumentAnnotation[];
   isLoading: boolean;
   error: Error | null;
+  /** True when the safety cap stopped pagination while more annotations remained. */
+  truncated: boolean;
 }
 
 // ============================================================================

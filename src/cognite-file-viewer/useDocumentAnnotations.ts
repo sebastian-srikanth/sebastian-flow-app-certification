@@ -1,13 +1,13 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
 import type { CogniteClient, EdgeDefinition } from '@cognite/sdk';
-
-import { cdfTaskRunner } from '@/lib/cdfTaskRunner';
+import { useState, useEffect, useRef, useMemo } from 'react';
 
 import type {
   DocumentAnnotation,
   AnnotationResourceType,
   UseDocumentAnnotationsResult,
 } from './types';
+
+import { cdfTaskRunner } from '@/lib/cdfTaskRunner';
 
 // ============================================================================
 // CDM constants
@@ -16,7 +16,9 @@ import type {
 const CDM_SPACE = 'cdf_cdm';
 const CDM_VERSION = 'v1';
 const DIAGRAM_ANNOTATION_VIEW = 'CogniteDiagramAnnotation';
-const QUERY_LIMIT = 10_000;
+const QUERY_PAGE_SIZE = 1_000;
+const MAX_QUERY_PAGES = 5;
+const MAX_ANNOTATIONS = QUERY_PAGE_SIZE * MAX_QUERY_PAGES;
 
 // ============================================================================
 // Cache — stores ALL annotations for a file, filtered by page at read time
@@ -27,6 +29,7 @@ const MAX_CACHE_SIZE = 50;
 
 interface CacheEntry {
   data: DocumentAnnotation[];
+  truncated: boolean;
   timestamp: number;
 }
 
@@ -83,18 +86,26 @@ function getResourceType(annotationType: string): AnnotationResourceType {
 // Fetcher — fetches ALL annotations for a file (not per-page)
 // ============================================================================
 
+interface AnnotationFetchResult {
+  annotations: DocumentAnnotation[];
+  truncated: boolean;
+}
+
 async function fetchAllAnnotations(
   client: CogniteClient,
   space: string,
   externalId: string,
-): Promise<DocumentAnnotation[]> {
+): Promise<AnnotationFetchResult> {
   const containerId = `${space}:${externalId}`;
   const propPath = `${DIAGRAM_ANNOTATION_VIEW}/${CDM_VERSION}`;
 
   const allEdges: EdgeDefinition[] = [];
   let cursor: string | undefined;
+  let queryPages = 0;
 
   do {
+    const remaining = MAX_ANNOTATIONS - allEdges.length;
+    const queryLimit = Math.min(QUERY_PAGE_SIZE, remaining);
     const queryPayload: Parameters<CogniteClient['instances']['query']>[0] = {
       with: {
         files: {
@@ -122,7 +133,7 @@ async function fetchAllAnnotations(
             from: 'files',
             direction: 'outwards',
           },
-          limit: QUERY_LIMIT,
+          limit: queryLimit,
         },
       },
       select: {
@@ -146,7 +157,7 @@ async function fetchAllAnnotations(
               ],
             },
           ],
-          limit: QUERY_LIMIT,
+          limit: queryLimit,
         },
       },
       cursors: cursor ? { annotations: cursor } : undefined,
@@ -157,15 +168,17 @@ async function fetchAllAnnotations(
     const edges = (response.items?.annotations ?? []).filter(
       (a) => a.instanceType === 'edge',
     );
-    allEdges.push(...edges);
+    allEdges.push(...edges.slice(0, remaining));
 
-    cursor =
-      edges.length < QUERY_LIMIT
-        ? undefined
-        : response.nextCursor?.annotations;
-  } while (cursor);
+    cursor = response.nextCursor?.annotations || undefined;
+    queryPages += 1;
+  } while (
+    cursor &&
+    queryPages < MAX_QUERY_PAGES &&
+    allEdges.length < MAX_ANNOTATIONS
+  );
 
-  return allEdges.flatMap((edge) => {
+  const annotations = allEdges.flatMap((edge) => {
     const props: CdmAnnotationProps | undefined =
       edge.properties?.[CDM_SPACE]?.[propPath];
     if (!props) return [];
@@ -195,6 +208,8 @@ async function fetchAllAnnotations(
     };
     return [annotation];
   });
+
+  return { annotations, truncated: cursor !== undefined };
 }
 
 // ============================================================================
@@ -205,12 +220,14 @@ interface AnnotationState {
   allAnnotations: DocumentAnnotation[];
   isLoading: boolean;
   error: Error | null;
+  truncated: boolean;
 }
 
 const INITIAL_STATE: AnnotationState = {
   allAnnotations: [],
   isLoading: false,
   error: null,
+  truncated: false,
 };
 
 export function useDocumentAnnotations(
@@ -229,38 +246,68 @@ export function useDocumentAnnotations(
 
   // Fetch all annotations for the file (not per-page)
   useEffect(() => {
+    const id = ++cancelRef.current;
     if (!enabled || !client || !space || !extId || !project) {
-      setState(INITIAL_STATE);
       return;
     }
 
-    const id = ++cancelRef.current;
+    const queryClient = client;
+    const querySpace = space;
+    const queryExternalId = extId;
+    const queryProject = project;
     const cancelled = () => id !== cancelRef.current;
 
-    const key = fileCacheKey(project, space, extId);
-    const cached = annotationCache.get(key);
-    if (cached && Date.now() - cached.timestamp < STALE_TIME) {
-      setState({ allAnnotations: cached.data, isLoading: false, error: null });
-      return;
-    }
+    async function loadAnnotations(): Promise<void> {
+      const key = fileCacheKey(queryProject, querySpace, queryExternalId);
+      const cached = annotationCache.get(key);
+      if (cached && Date.now() - cached.timestamp < STALE_TIME) {
+        setState({
+          allAnnotations: cached.data,
+          isLoading: false,
+          error: null,
+          truncated: cached.truncated,
+        });
+        return;
+      }
 
-    setState((prev) => ({ ...prev, isLoading: true, error: null }));
+      setState({
+        allAnnotations: [],
+        isLoading: true,
+        error: null,
+        truncated: false,
+      });
 
-    fetchAllAnnotations(client, space, extId)
-      .then((data) => {
+      try {
+        const { annotations, truncated } = await fetchAllAnnotations(
+          queryClient,
+          querySpace,
+          queryExternalId,
+        );
         if (cancelled()) return;
-        annotationCache.set(key, { data, timestamp: Date.now() });
+        annotationCache.set(key, {
+          data: annotations,
+          truncated,
+          timestamp: Date.now(),
+        });
         evictStaleAnnotations();
-        setState({ allAnnotations: data, isLoading: false, error: null });
-      })
-      .catch((err) => {
+        setState({
+          allAnnotations: annotations,
+          isLoading: false,
+          error: null,
+          truncated,
+        });
+      } catch (error: unknown) {
         if (cancelled()) return;
         setState({
           allAnnotations: [],
           isLoading: false,
-          error: err instanceof Error ? err : new Error(String(err)),
+          error: error instanceof Error ? error : new Error(String(error)),
+          truncated: false,
         });
-      });
+      }
+    }
+
+    void loadAnnotations();
   }, [client, project, space, extId, enabled]);
 
   // Filter by current page (cheap client-side filter on cached data)
@@ -269,5 +316,19 @@ export function useDocumentAnnotations(
     [state.allAnnotations, currentPage],
   );
 
-  return { annotations, isLoading: state.isLoading, error: state.error };
+  if (!enabled || !client || !space || !extId || !project) {
+    return {
+      annotations: [],
+      isLoading: false,
+      error: null,
+      truncated: false,
+    };
+  }
+
+  return {
+    annotations,
+    isLoading: state.isLoading,
+    error: state.error,
+    truncated: state.truncated,
+  };
 }

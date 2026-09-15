@@ -1,23 +1,26 @@
+import { Alert, AlertDescription } from '@cognite/aura/components/alert';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
-import 'react-pdf/dist/Page/TextLayer.css';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
+import 'react-pdf/dist/Page/TextLayer.css';
 
-type PdfPageLoadInfo = {
-  originalWidth: number;
-  originalHeight: number;
-};
+import { DocumentAnnotationOverlay } from './DocumentAnnotationOverlay';
+import { getViewerType } from './mimeTypes';
+import type { CogniteFileViewerProps } from './types';
+import { useBlobUrl } from './useBlobUrl';
+import { useDocumentAnnotations } from './useDocumentAnnotations';
+import { useFileResolver } from './useFileResolver';
+import { useViewport, computeBaseWidth } from './useViewport';
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
   import.meta.url,
 ).toString();
-import type { CogniteFileViewerProps } from './types';
-import { getViewerType } from './mimeTypes';
-import { useFileResolver } from './useFileResolver';
-import { useDocumentAnnotations } from './useDocumentAnnotations';
-import { DocumentAnnotationOverlay } from './DocumentAnnotationOverlay';
-import { useViewport, computeBaseWidth } from './useViewport';
+
+type PdfPageLoadInfo = {
+  originalWidth: number;
+  originalHeight: number;
+};
 
 // ============================================================================
 // Sub-renderers
@@ -43,53 +46,6 @@ function DefaultUnsupported({ mimeType }: { mimeType: string | undefined }) {
   );
 }
 
-// ---------- Shared blob fetch hook ----------
-
-function useBlobUrl(url: string) {
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
-  const [error, setError] = useState<Error | null>(null);
-  const objectUrlRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    // Reset state for new URL
-    setBlobUrl(null);
-    setError(null);
-
-    // Revoke previous blob URL
-    if (objectUrlRef.current) {
-      URL.revokeObjectURL(objectUrlRef.current);
-      objectUrlRef.current = null;
-    }
-
-    fetch(url)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.blob();
-      })
-      .then((blob) => {
-        if (cancelled) return;
-        const newUrl = URL.createObjectURL(blob);
-        objectUrlRef.current = newUrl;
-        setBlobUrl(newUrl);
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err : new Error(String(err)));
-      });
-
-    return () => {
-      cancelled = true;
-      if (objectUrlRef.current) {
-        URL.revokeObjectURL(objectUrlRef.current);
-        objectUrlRef.current = null;
-      }
-    };
-  }, [url]);
-
-  return { blobUrl, error };
-}
-
 // ---------- Image ----------
 
 interface ImageRendererProps
@@ -103,18 +59,20 @@ function ImageRenderer(props: ImageRendererProps) {
     useViewport(props);
 
   const { blobUrl, error } = useBlobUrl(url);
-  const [naturalSize, setNaturalSize] = useState<{ width: number; height: number } | null>(null);
-
-  // Reset natural size when URL changes
-  const prevUrlRef = useRef(url);
-  if (prevUrlRef.current !== url) {
-    prevUrlRef.current = url;
-    setNaturalSize(null);
-  }
+  const [measuredImage, setMeasuredImage] = useState<{
+    sourceUrl: string;
+    width: number;
+    height: number;
+  } | null>(null);
+  const naturalSize = measuredImage?.sourceUrl === url ? measuredImage : null;
 
   const handleLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
-    setNaturalSize({ width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight });
-  }, []);
+    setMeasuredImage({
+      sourceUrl: url,
+      width: e.currentTarget.naturalWidth,
+      height: e.currentTarget.naturalHeight,
+    });
+  }, [url]);
 
   if (error) return renderError ? renderError(error) : <DefaultError error={error} />;
   if (!blobUrl) return renderLoading ? renderLoading() : <DefaultLoading />;
@@ -284,11 +242,9 @@ function PdfRenderer(props: PdfRendererProps) {
   );
 
   // Reset pan on page change
-  const handlePanChangeRef = useRef(handlePanChange);
-  handlePanChangeRef.current = handlePanChange;
   useEffect(() => {
-    handlePanChangeRef.current({ x: 0, y: 0 });
-  }, [currentPage]);
+    handlePanChange({ x: 0, y: 0 });
+  }, [currentPage, handlePanChange]);
 
   // -- Page dimensions (for annotation overlay) --
   const [pageDims, setPageDims] = useState({ width: 0, height: 0 });
@@ -333,7 +289,7 @@ function PdfRenderer(props: PdfRendererProps) {
   // -- Annotations --
   const annotationsEnabled = showAnnotations && instanceId !== undefined;
 
-  const { annotations } = useDocumentAnnotations(
+  const { annotations, truncated: annotationsTruncated } = useDocumentAnnotations(
     client,
     instanceId,
     currentPage,
@@ -341,15 +297,12 @@ function PdfRenderer(props: PdfRendererProps) {
   );
 
   // -- PDF Document callbacks --
-  const currentPageRef = useRef(currentPage);
-  currentPageRef.current = currentPage;
-
   const handleLoadSuccess = useCallback(
     ({ numPages }: { numPages: number }) => {
       onDocumentLoad?.({ numPages });
-      if (currentPageRef.current > numPages) handlePageChange(1);
+      if (currentPage > numPages) handlePageChange(1);
     },
-    [onDocumentLoad, handlePageChange],
+    [currentPage, onDocumentLoad, handlePageChange],
   );
 
   return (
@@ -371,6 +324,13 @@ function PdfRenderer(props: PdfRendererProps) {
           )
         }
       >
+        {annotationsTruncated && (
+          <Alert variant="secondary" className="m-2">
+            <AlertDescription>
+              Some diagram annotations are not shown to keep the preview responsive.
+            </AlertDescription>
+          </Alert>
+        )}
         <div
           ref={pageWrapperRef}
           style={{

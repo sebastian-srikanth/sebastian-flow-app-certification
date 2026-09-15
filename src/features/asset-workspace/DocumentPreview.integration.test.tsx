@@ -1,11 +1,14 @@
 import type { ConnectToHostAppResult, HostAppAPI } from '@cognite/app-sdk';
-import { CogniteClient, type ClientOptions } from '@cognite/sdk';
+import { CogniteClient, type ClientOptions, type EdgeDefinition } from '@cognite/sdk';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useEffect } from 'react';
+import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { clearAllFileCache } from '../../cognite-file-viewer/fileResolution';
+import { clearAnnotationCache } from '../../cognite-file-viewer/useDocumentAnnotations';
 import { AppErrorBoundary } from '../../components/AppErrorBoundary';
 import { FusionHostProvider } from '../../host/FusionHostProvider';
 import type { FusionHostProviderDeps } from '../../host/FusionHostProvider';
@@ -31,10 +34,24 @@ import { TimeSeriesServiceProvider } from './state/TimeSeriesServiceProvider';
  * viewer, `useFileResolver`, and the whole host provider chain) runs for real.
  */
 vi.mock('react-pdf', () => ({
-  Document: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="pdf-document">{children}</div>
+  Document: ({
+    children,
+    onLoadSuccess,
+  }: {
+    children: ReactNode;
+    onLoadSuccess?: (info: { numPages: number }) => void;
+  }) => {
+    useEffect(() => {
+      onLoadSuccess?.({ numPages: 3 });
+    }, [onLoadSuccess]);
+
+    return <div data-testid="pdf-document">{children}</div>;
+  },
+  Page: ({ pageNumber, scale }: { pageNumber: number; scale: number }) => (
+    <div data-testid="pdf-page">
+      PDF page {pageNumber} at {Math.round(scale * 100)}%
+    </div>
   ),
-  Page: () => <div data-testid="pdf-page">PDF page</div>,
   pdfjs: { GlobalWorkerOptions: { workerSrc: '' } },
 }));
 
@@ -224,6 +241,7 @@ function okStubs(overrides?: Partial<CdfStubs>): CdfStubs {
 describe('Document preview — real provider composition', () => {
   beforeEach(() => {
     clearAllFileCache();
+    clearAnnotationCache();
     vi.stubGlobal('open', vi.fn());
   });
 
@@ -235,7 +253,10 @@ describe('Document preview — real provider composition', () => {
   it('renders a PDF preview using the client from the mounted Fusion host provider', async () => {
     const host = renderWorkspace({ stubs: okStubs() });
 
-    await waitFor(() => expect(screen.getByText('Pump manual.pdf')).toBeInTheDocument());
+    await waitFor(
+      () => expect(screen.getByText('Pump manual.pdf')).toBeInTheDocument(),
+      { timeout: 5_000 },
+    );
 
     await userEvent.click(screen.getByRole('button', { name: 'Preview Pump manual.pdf' }));
 
@@ -249,6 +270,91 @@ describe('Document preview — real provider composition', () => {
       { instanceId: { space: CDF_CDM_SPACE, externalId: 'FILE-PDF' } },
     ]);
     expectNoErrorBoundaryFallback();
+  });
+
+  it('pages forward and backward through a loaded PDF', async () => {
+    const user = userEvent.setup();
+    renderWorkspace({ stubs: okStubs() });
+
+    await waitFor(() => expect(screen.getByText('Pump manual.pdf')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Preview Pump manual.pdf' }));
+
+    const dialog = await screen.findByRole('dialog');
+    await within(dialog).findByText('Page 1 of 3');
+    expect(within(dialog).getByTestId('pdf-page')).toHaveTextContent('PDF page 1');
+    expect(within(dialog).getByRole('button', { name: 'Previous page' })).toBeDisabled();
+
+    await user.click(within(dialog).getByRole('button', { name: 'Next page' }));
+    expect(within(dialog).getByText('Page 2 of 3')).toBeInTheDocument();
+    expect(within(dialog).getByTestId('pdf-page')).toHaveTextContent('PDF page 2');
+
+    await user.click(within(dialog).getByRole('button', { name: 'Previous page' }));
+    expect(within(dialog).getByText('Page 1 of 3')).toBeInTheDocument();
+  });
+
+  it('discloses when the annotation safety cap truncates a PDF overlay', async () => {
+    const host = renderWorkspace({ stubs: okStubs() });
+
+    await waitFor(
+      () => expect(screen.getByText('Pump manual.pdf')).toBeInTheDocument(),
+      { timeout: 5_000 },
+    );
+    const client = host.getCreatedClient();
+    if (client === null) {
+      throw new Error('Expected the Fusion host to create a Cognite client');
+    }
+
+    const annotationPage = makeAnnotationPage(1_000);
+    const query = vi.fn<CogniteClient['instances']['query']>().mockResolvedValue({
+      items: { annotations: annotationPage },
+      nextCursor: { annotations: 'more-annotations' },
+    });
+    client.instances.query = query;
+
+    await userEvent.click(screen.getByRole('button', { name: 'Preview Pump manual.pdf' }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(
+      await within(dialog).findByText(
+        'Some diagram annotations are not shown to keep the preview responsive.',
+      ),
+    ).toBeInTheDocument();
+    expect(query).toHaveBeenCalledTimes(5);
+  });
+
+  it('zooms, resets, and clamps the PDF zoom controls', async () => {
+    const user = userEvent.setup();
+    renderWorkspace({ stubs: okStubs() });
+
+    await waitFor(() => expect(screen.getByText('Pump manual.pdf')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Preview Pump manual.pdf' }));
+
+    const dialog = await screen.findByRole('dialog');
+    await within(dialog).findByTestId('pdf-page');
+    const zoomIn = within(dialog).getByRole('button', { name: 'Zoom in' });
+    const zoomOut = within(dialog).getByRole('button', { name: 'Zoom out' });
+    const resetZoom = within(dialog).getByRole('button', { name: 'Reset zoom' });
+
+    await user.click(zoomIn);
+    expect(within(dialog).getByText('125%')).toBeInTheDocument();
+    expect(resetZoom).toBeEnabled();
+
+    await user.click(resetZoom);
+    expect(within(dialog).getByText('100%')).toBeInTheDocument();
+    expect(resetZoom).toBeDisabled();
+
+    for (let step = 0; step < 3; step += 1) {
+      await user.click(zoomOut);
+    }
+    expect(within(dialog).getByText('25%')).toBeInTheDocument();
+    expect(zoomOut).toBeDisabled();
+
+    for (let step = 0; step < 19; step += 1) {
+      await user.click(zoomIn);
+    }
+    expect(within(dialog).getByText('500%')).toBeInTheDocument();
+    expect(zoomIn).toBeDisabled();
+    expect(within(dialog).getByTestId('pdf-page')).toHaveTextContent('at 500%');
   });
 
   it('does not fall through to the application error boundary when Preview is clicked', async () => {
@@ -276,7 +382,10 @@ describe('Document preview — real provider composition', () => {
 
     await screen.findByRole('dialog');
     await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith('https://files.test/signed-download'),
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://files.test/signed-download',
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      ),
     );
     expectNoErrorBoundaryFallback();
   });
@@ -328,3 +437,24 @@ describe('Document preview — real provider composition', () => {
     expectNoErrorBoundaryFallback();
   });
 });
+
+function makeAnnotationPage(count: number): EdgeDefinition[] {
+  return Array.from({ length: count }, (_, index) => ({
+    createdTime: 0,
+    externalId: `ANNOTATION-${index}`,
+    instanceType: 'edge',
+    lastUpdatedTime: 0,
+    space: CDF_CDM_SPACE,
+    version: 1,
+    type: { space: CDF_CDM_SPACE, externalId: 'diagrams.AssetLink' },
+    startNode: { space: CDF_CDM_SPACE, externalId: pdfDocument.externalId },
+    endNode: { space: CDF_CDM_SPACE, externalId: `RESOURCE-${index}` },
+    properties: {
+      cdf_cdm: {
+        'CogniteDiagramAnnotation/v1': {
+          startNodePageNumber: 2,
+        },
+      },
+    },
+  }));
+}

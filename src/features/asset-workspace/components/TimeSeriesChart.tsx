@@ -11,6 +11,10 @@ import { CartesianGrid, Line, LineChart, XAxis, YAxis } from 'recharts';
 
 import { mergeChartSeries } from '../time-series/chartData';
 import { timeSeriesRefKey } from '../time-series/timeSeriesProperties';
+import {
+  formatChartTimestamp,
+  formatTooltipTimestamp,
+} from '../time-series/tooltipTimestamp';
 import type { ChartDatapointSeries } from '../time-series/types';
 
 const CHART_COLORS = [
@@ -27,15 +31,6 @@ type TimeSeriesChartProps = {
 
 function chartDataKey(index: number): string {
   return `series${index}`;
-}
-
-function formatAxisTimestamp(timestamp: number): string {
-  return new Date(timestamp).toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
 }
 
 function buildChartConfig(seriesList: ChartDatapointSeries[]): ChartConfig {
@@ -73,18 +68,14 @@ export function TimeSeriesChart({ seriesList }: TimeSeriesChartProps) {
           dataKey="timestamp"
           type="number"
           domain={['dataMin', 'dataMax']}
-          tickFormatter={formatAxisTimestamp}
+          tickFormatter={formatChartTimestamp}
           tickLine={false}
           axisLine={false}
           minTickGap={32}
         />
         <YAxis tickLine={false} axisLine={false} width={56} />
         <ChartTooltip
-          content={
-            <ChartTooltipContent
-              labelFormatter={(value) => formatAxisTimestamp(Number(value))}
-            />
-          }
+          content={<ChartTooltipContent labelFormatter={formatTooltipTimestamp} />}
         />
         <ChartLegend content={<ChartLegendContent />} />
         {seriesList.map((series, index) => {

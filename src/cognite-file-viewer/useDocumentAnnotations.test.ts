@@ -99,6 +99,112 @@ describe(useDocumentAnnotations.name, () => {
     rerender({ page: 2 });
     expect(result.current.annotations).toHaveLength(1);
     expect(result.current.annotations[0]?.page).toBe(2);
+    expect(result.current.truncated).toBe(false);
+  });
+
+  it('follows annotation cursors across query pages', async () => {
+    const firstPage = Array.from({ length: 1_000 }, (_, index) =>
+      makeAnnotationEdge(`ANN-FIRST-${index}`, {
+        startNodePageNumber: 1,
+      }),
+    );
+    const query = vi
+      .fn<CogniteClient['instances']['query']>()
+      .mockResolvedValueOnce({
+        items: { annotations: firstPage },
+        nextCursor: { annotations: 'page-2' },
+      })
+      .mockResolvedValueOnce({
+        items: {
+          annotations: [
+            makeAnnotationEdge('ANN-SECOND', {
+              startNodePageNumber: 1,
+            }),
+          ],
+        },
+        nextCursor: {},
+      });
+    const client = {
+      project: 'test-project',
+      instances: { query },
+    } as unknown as CogniteClient;
+
+    const { result } = renderHook(() =>
+      useDocumentAnnotations(client, { space: 'cdf_cdm', externalId: 'FILE-1' }, 1),
+    );
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(query.mock.calls[1]?.[0].cursors).toEqual({ annotations: 'page-2' });
+    expect(result.current.annotations).toHaveLength(1_001);
+    expect(result.current.truncated).toBe(false);
+  });
+
+  it('stops after the annotation safety cap and reports truncation', async () => {
+    const query = vi.fn<CogniteClient['instances']['query']>();
+    for (let page = 1; page <= 5; page += 1) {
+      query.mockResolvedValueOnce({
+        items: {
+          annotations: Array.from({ length: 1_000 }, (_, index) =>
+            makeAnnotationEdge(`ANN-${page}-${index}`, {
+              startNodePageNumber: 1,
+            }),
+          ),
+        },
+        nextCursor: { annotations: `page-${page + 1}` },
+      });
+    }
+    query.mockRejectedValueOnce(new Error('The safety cap failed'));
+    const client = {
+      project: 'test-project',
+      instances: { query },
+    } as unknown as CogniteClient;
+
+    const { result } = renderHook(() =>
+      useDocumentAnnotations(client, { space: 'cdf_cdm', externalId: 'FILE-1' }, 1),
+    );
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(query).toHaveBeenCalledTimes(5);
+    expect(result.current.annotations).toHaveLength(5_000);
+    expect(result.current.truncated).toBe(true);
+    expect(result.current.error).toBeNull();
+  });
+
+  it('clears annotations from the previous file while the next file loads', async () => {
+    const query = vi
+      .fn<CogniteClient['instances']['query']>()
+      .mockResolvedValueOnce({
+        items: {
+          annotations: [
+            makeAnnotationEdge('ANN-FIRST-FILE', {
+              startNodePageNumber: 1,
+            }),
+          ],
+        },
+        nextCursor: {},
+      })
+      .mockReturnValueOnce(new Promise(() => undefined));
+    const client = {
+      project: 'test-project',
+      instances: { query },
+    } as unknown as CogniteClient;
+
+    const { result, rerender } = renderHook(
+      ({ externalId }: { externalId: string }) =>
+        useDocumentAnnotations(client, { space: 'cdf_cdm', externalId }, 1),
+      { initialProps: { externalId: 'FILE-1' } },
+    );
+
+    await waitFor(() => expect(result.current.annotations).toHaveLength(1));
+
+    rerender({ externalId: 'FILE-2' });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(true));
+    expect(result.current.annotations).toEqual([]);
+    expect(result.current.truncated).toBe(false);
   });
 
   it('uses cached annotations on subsequent renders', async () => {

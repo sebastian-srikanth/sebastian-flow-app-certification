@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { CogniteFileViewer } from './CogniteFileViewer';
 
+// `react-pdf` needs a pdf.js worker and canvas 2D context, which happy-dom does not provide.
 vi.mock('react-pdf', () => ({
   Document: ({ children, loading }: { children: React.ReactNode; loading: React.ReactNode }) => (
     <div data-testid="pdf-document">
